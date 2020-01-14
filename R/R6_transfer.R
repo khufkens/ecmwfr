@@ -134,7 +134,7 @@ transfer_obj <- R6::R6Class("wf_transfer",
 
       retry_in <- as.numeric(self$next_retry) - as.numeric(Sys.time())
       if (retry_in > 0) {
-        if(self$verbose){
+        if(self$verbose) {
           # let a spinner spin for "retry" seconds
           spinner(retry_in)
         } else {
@@ -169,7 +169,7 @@ transfer_obj <- R6::R6Class("wf_transfer",
           self$file_url <- ct$location
         } else if (self$status == "failed") {
           # if the transfer failed, return a warning
-          warn_or_error("Data transfer failed with error", ct$error, error = fail_is_error)
+          warn_or_error("Data transfer failed with error ", ct$error, error = fail_is_error)
         }
         self$next_retry <- Sys.time() + self$retry
         return(invisible(self))
@@ -205,19 +205,19 @@ transfer_obj <- R6::R6Class("wf_transfer",
           self$next_retry <- Sys.time() + self$retry
         } else {
           self$next_retry <- Sys.time() + self$retry
-          warn_or_error("Data transfer failed with error", response$status_code, error = fail_is_error)
+          warn_or_error("Data transfer failed with error ", response$status_code, error = fail_is_error)
 
         }
         return(invisible(self))
       }
     },
 
-    is_completed = function() {
-      self$status == "completed"
+    is_running = function() {
+      !(self$code == 302)
     },
 
-    is_running= function() {
-      !(self$status %in% c("completed", "deleted"))
+    is_pending = function() {
+      !(self$status == "failed" | self$downloaded)
     },
 
     open_request = function() {
@@ -341,11 +341,10 @@ transfer_obj <- R6::R6Class("wf_transfer",
     },
 
     exit_message = function(){
-
       job_list <- ifelse(self$service == "webapi",
                          "  Visit https://apps.ecmwf.int/webmars/joblist/",
                          "  Visit https://cds.climate.copernicus.eu/cdsapp#!/yourrequests")
-      url <- if (self$serice == "cds") self$name else self$url
+      url <- if (self$service == "cds") self$name else self$url
       intro <- paste(
         "Even after exiting your request is still beeing processed!",
         job_list,
@@ -354,24 +353,21 @@ transfer_obj <- R6::R6Class("wf_transfer",
 
       options <- paste(
         "- Retry downloading as soon as as completed:\n",
-        "  wf_transfer(url = '", url, "\n",
-        "<user>,\n ",
+        "  wf_transfer(url = '", url,
+        "',\n user ='", self$user,
         "',\n path = '",self$path,
-        "',\n filename = '",self$file,
+        "',\n filename = '", basename(self$file),
         "',\n service = \'", self$service,"')\n\n",
         "- Delete the job upon completion using:\n",
-        "  wf_delete(<user>,\n url ='", url,"')\n\n",
+        "  wf_delete('", self$user,
+        ",'\n url ='", url,"')\n\n",
         sep = "")
 
       # combine all messages
       exit_msg <- paste(intro, options, sep = "")
       message(sprintf("- Your request has been submitted as a %s request.\n\n  %s",
-                      toupper(service),exit_msg))
-    }
-
-
-
-
+                      toupper(self$service), exit_msg))
+    },
     request = NA,
     path = NA,
     file = NA,
