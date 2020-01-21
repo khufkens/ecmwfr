@@ -1,6 +1,7 @@
 # set options
 opts <- options(keyring_warn_for_env_fallback = FALSE)
 on.exit(options(opts), add = TRUE)
+user <- "2088"
 
 # format request (see below)
 cds_request <- list(
@@ -25,13 +26,13 @@ server_check <- !ecmwf_running(wf_server(service = "cds"))
 if(!server_check){
   key <- system("echo $CDS", intern = TRUE)
   if(key != "" & key != "$CDS"){
-    wf_set_key(user = "2088",
+    wf_set_key(user = user,
                key = key,
                service = "cds")
   }
   rm(key)
 
-  login_check <- try(wf_get_key(user = "2088",
+  login_check <- try(wf_get_key(user = user,
                                 service = "cds"), silent = TRUE)
   login_check <- inherits(login_check, "try-error")
   server_check <- !ecmwf_running(wf_server(service = "cds"))
@@ -45,7 +46,7 @@ test_that("set key", {
   skip_if(server_check)
   key <- system("echo $CDS", intern = TRUE)
   if(key != "" & key != "$CDS"){
-    expect_message(wf_set_key(user = "2088",
+    expect_message(wf_set_key(user = user,
                key = key,
                service = "cds"))
   }
@@ -56,10 +57,10 @@ test_that("cds datasets returns data.frame or list", {
   skip_on_cran()
   skip_if(login_check)
   skip_if(server_check)
-  expect_true(inherits(wf_datasets(user = "2088",
+  expect_true(inherits(wf_datasets(user = user,
                                    service = "cds",
                                    simplify = TRUE), "data.frame"))
-  expect_true(inherits(wf_datasets(user = "2088",
+  expect_true(inherits(wf_datasets(user = user,
                                    service = "cds",
                                    simplify = FALSE), "list"))
 })
@@ -70,20 +71,20 @@ test_that("cds request", {
   skip_if(login_check)
   skip_if(server_check)
 
-  expect_message(wf_request(user = "2088",
+  expect_message(wf_request(user = user,
                     request = cds_request,
                     transfer = TRUE))
 
-  expect_error(wf_request(user = "2088",
+  expect_error(wf_request(user = user,
                     request = "xyz",
                     transfer = TRUE))
 
-  expect_error(wf_request(user = "2088",
+  expect_error(wf_request(user = user,
                           transfer = TRUE))
 
-  expect_true(inherits(wf_request(user = "2088",
+  expect_true(inherits(wf_request(user = user,
               request = cds_request,
-              transfer = FALSE), "list"))
+              transfer = FALSE), "wf_transfer"))
 })
 
 
@@ -95,28 +96,28 @@ test_that("cds request", {
 
    # CDS dataset (requires at least 'user')
    expect_error(wf_dataset())
-   expect_output(str(wf_datasets(user = "2088", service = "cds")))
+   expect_output(str(wf_datasets(user = user, service = "cds")))
 
    # CDS productinfo (requires at least 'user' and 'dataset')
    expect_error(wf_product_info())
-   expect_error(wf_product_info(user = "2088",
+   expect_error(wf_product_info(user = user,
                                 service = "cds",
                                 dataset = "foo"))
 
    # CDS productinfo: product name which is not available
-   expect_output(str(wf_product_info(user = "2088",
+   expect_output(str(wf_product_info(user = user,
                                      service = "cds",
                                      dataset = "satellite-methane")))
 
    # CDS tranfer (forwarded to wf_transfer, requires at least
    # 'user' and 'url)
    expect_error(wf_transfer())
-   expect_error(wf_transfer(user = "2088",
+   expect_error(wf_transfer(user = user,
                             service = "cds",
                             url = "http://google.com"))
 
    # CDS transfer with wrong type
-   expect_error(wf_transfer(user = "2088",
+   expect_error(wf_transfer(user = user,
                             url = "http://google.com",
                             service = "foo"))
 
@@ -138,7 +139,7 @@ test_that("delete request", {
   skip_if(login_check)
   skip_if(server_check)
    expect_warning(
-     wf_delete(user = "2088",
+     wf_delete(user = user,
                service = "cds",
                url = "50340909as"))
 })
