@@ -90,202 +90,22 @@ wf_request <- function(
     return(invisible(job))
   }
 
-  if(!is.list(request) | is.character(request)) {
-    stop("`request` must be a named list. \n",
-         "If you are passing the user as first argument, notice that argument ",
-         "order was changed in version 1.1.1.")
-  }
-
-  # check the login credentials
-  if(missing(request)){
-    stop("Please provide ECMWF or CDS login credentials and data request!")
-  }
-
-  if (missing(user)) {
-    user <- rbind(keyring::key_list(service = make_key_service(c("webapi"))),
-                  keyring::key_list(service = make_key_service(c("cds"))))
-    serv <- make_key_service()
-    user <- user[substr(user$service, 1,  nchar(serv)) == serv, ][["username"]]
-  }
-
-  # checks user login, the request layout and
-  # returns the service to use if successful
-  wf_check <- lapply(user, function(u) try(wf_check_request(u, request), silent = TRUE))
-  correct <- which(!vapply(wf_check, inherits, TRUE, "try-error"))
-  wf_check <- wf_check[[correct]]
-  user <- user[correct]
-
-  if (verbose) {
-    message("Requesting data to the ", wf_check$service, " service with username ", user)
-  }
-
-
-  if (length(wf_check) == 0) {
-    stop(sprintf("Data identifier %s is not found in Web API or CDS datasets.
-                 Or your login credentials do not match your request.",
-                 request$dataset), call. = FALSE)
-  }
-
-  # split out data
-  service <- wf_check$service
-  url <- wf_check$url
-
-  # get key
-  key <- wf_get_key(user = user, service = service)
-
-  # getting api url: different handling if 'dataset = "mars"',
-  # requests to 'dataset = "mars"' require a non-public user
-  # account (member states/commercial).
-
-  # depending on the service get the response
-  # for the query provided
-  if (service == "webapi"){
-    response <- httr::POST(
-      url,
-      httr::add_headers(
-        "Accept" = "application/json",
-        "Content-Type" = "application/json",
-        "From" = user,
-        "X-ECMWF-KEY" = key),
-      body = request,
-      encode = "json"
-    )
-  } else {
-    response <- httr::POST(
-      sprintf("%s/resources/%s", wf_server(service = "cds"),
-              request$dataset),
-      httr::authenticate(user, key),
-      httr::add_headers(
-        "Accept" = "application/json",
-        "Content-Type" = "application/json"),
-      body = request,
-      encode = "json"
-    )
-  }
-
-  # trap general http error
-  if(httr::http_error(response)){
-    stop(httr::content(response),
-         call. = FALSE)
-  }
-
-  # grab content, to look at the status
-  ct <- httr::content(response)
-
-  # first run is always 202
-  if(service == "cds"){
-    ct$code <- 202
-  }
-
-  # some verbose feedback
-  if(verbose){
-    message("- staging data transfer at url endpoint or request id:")
-    message("  ", ifelse(service == "cds",ct$request_id, ct$href), "\n")
-  }
+  new_transfer <- transfer_obj$new(request = request, user = user, path = path,
+                               time_out = time_out, verbose = verbose)
 
   # only return the content of the query
   if(!transfer){
-    message("  No download requests will be made, however...\n")
-    exit_message(
-      url = ifelse(service == "cds",ct$request_id, ct$href),
-      path = path,
-      file = request$target,
-      service = service)
-    return(invisible(ct))
+    if (verbose) message("  No download requests will be made, however...\n")
+    new_transfer$exit_message()
+    return(invisible(new_transfer))
   }
 
-  # set time-out counter
-  if(verbose){
-    message(sprintf("- timeout set to %.1f hours", time_out/3600))
-  }
+  new_transfer$transfer()
 
-  # set time-out
-  time_out <- Sys.time() + time_out
-
-  # Temporary file name, will be used in combination with tempdir() when
-  # calling wf_transfer.
-  tmp_file <- basename(tempfile("ecmwfr_"))
-
-  # keep waiting for the download order to come online
-  # with status code 303. 202 = connection accepted, but job queued.
-  # http error codes (>400) will be trapped by the wf_transfer()
-  # function call
-  while(ct$code == 202){ # check formatting state variable CDS
-
-    # exit routine when the time out
-    if(Sys.time() > time_out){
-      if(verbose){
-        message("  Your download timed out, however ...\n")
-        exit_message(
-          url = ifelse(service == "cds",ct$request_id, ct$href),
-          path = path,
-          file = request$target,
-          service = service)
-      }
-      return(ct)
-    }
-
-    # set retry rate, dynamic for WebAPI, static 10 seconds CDS
-    retry <- as.numeric(ifelse(service == "cds", 5, ct$retry))
-
-    if(verbose){
-      # let a spinner spin for "retry" seconds
-      spinner(retry)
-    } else {
-      # sleep
-      Sys.sleep(retry)
-    }
-
-    # attempt a download. Use 'input_user', can also
-    # be NULL (load user information from '.ecmwfapirc'
-    # file inside wf_transfer).
-    ct <- wf_transfer(url = ifelse(service == "cds",
-                                   ct$request_id, ct$href),
-                      user    = user,
-                      service  = service,
-                      filename = tmp_file,
-                      verbose  = verbose)
-  }
-
-  # Copy data from temporary file to final location
-  # and delete original, with an exception for tempdir() location.
-  # The latter to facilitate package integration.
-  if (path != tempdir()) {
-
-    src <- file.path(tempdir(), tmp_file)
-    dst <- file.path(path, request$target)
-
-    # rename / move file
-    move <- suppressWarnings(file.rename(src, dst))
-
-    # check if the move was succesful
-    # fails for separate disks/partitions
-    # then copy and remove
-    if(!move){
-      file.copy(src, dst, overwrite = TRUE)
-      file.remove(src)
-    }
-
-    if ( verbose ){
-      message(sprintf("- moved temporary file to -> %s", dst))
-    }
-
-  } else {
-    dst <- file.path(path, tmp_file)
-    message("- file not copied and removed (path == tempdir())")
-  }
-
-  # delete the request upon succesful download
-  # to free up other download slots. Not possible
-  # for ECMWF mars requests (skip)
-  if(!request$dataset == "mars") {
-    wf_delete(user   = user,
-              url    = ifelse(service == "cds",
-                              ct$request_id, ct$href),
-              verbose = verbose,
-              service = service)
-  }
+  new_transfer$delete()
 
   # return final file name/path (dst = destination).
-  return(invisible(dst))
+  return(invisible(new_transfer$file))
 }
+
+

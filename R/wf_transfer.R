@@ -40,6 +40,11 @@ wf_transfer <- function(
   verbose = TRUE
 ){
 
+  if (inherits(url, "wf_transfer")) {
+    url$transfer(verbose = verbose)
+    return(invisible(url))
+  }
+
   # match arguments, if not stop
   service <- match.arg(service, c("webapi", "cds"))
 

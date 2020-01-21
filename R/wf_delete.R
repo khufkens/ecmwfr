@@ -31,6 +31,10 @@ wf_delete <- function(
   verbose = TRUE
 ){
 
+  if (inherits(url, "wf_transfer")) {
+    url$delete(verbose = verbose)
+    return(invisible(url))
+  }
   # check the login credentials
   if(missing(user) | missing(url)){
     stop("Please provide ECMWF login user / url!")
@@ -73,10 +77,10 @@ wf_delete <- function(
   if(response$status == 204){
     if (verbose){
       message("- request purged from queue!")
-    } else {
-      invisible()
     }
   } else {
     warning("Request not purged from queue, check download!")
+    return(invisible(FALSE))
   }
+  return(invisible(TRUE))
 }
