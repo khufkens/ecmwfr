@@ -200,7 +200,10 @@ retrieve_header <- function(url, headers) {
   close(con)
 
   head$headers <- curl::parse_headers_list(head$headers)
-  return(head)
+  return(list(header = head,
+              get_response = function() {
+                httr::GET(url, do.call(httr::add_headers, headers))
+              }))
 }
 
 

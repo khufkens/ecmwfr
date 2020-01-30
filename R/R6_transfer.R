@@ -134,7 +134,6 @@ transfer_obj <- R6::R6Class("wf_transfer",
       }
 
       key <- wf_get_key(user = self$user, service = self$service)
-
       retry_in <- as.numeric(self$next_retry) - as.numeric(Sys.time())
       if (retry_in > 0) {
         if(self$verbose) {
@@ -190,28 +189,49 @@ transfer_obj <- R6::R6Class("wf_transfer",
                                       "From" = self$user,
                                       "X-ECMWF-KEY" = key)
         )
-        status_code <- response[["status_code"]]
+
+        status_code <- response$header[["status_code"]]
+        if (status_code == "200") {  # Done!
+            self$status <- self$state <-  "completed"
+            self$code <- 302
+            self$url <- self$href <-  response$header$url
+            self$file_url <- response$header$url
+            self$next_retry <- Sys.time() + self$retry
+            return(invisible(self))
+        }
+
+        response <- response$get_response()
 
         if (httr::http_error(response$status_code)) {
-          warn_or_error("Your requested download failed - check url", call. = FALSE, error = fail_is_error)
+          ct <- httr::content(response)
+          self$status <- self$state <- ct$status
+          self$code <- status_code
+          self$retry <- as.numeric(ct$retry)
+          self$url <- self$href <- ct$href
+          self$next_retry <- Sys.time() + self$retry
+          if (self$status == "rejected") {
+            error_msg <- paste0("Your request was rejected. Reason given:\n", ct$reason)
+          } else if (self$status == "aborted") {
+            error_msg <- paste0("Your request was aborted. Reason given:\n", ct$reason)
+          } else {
+            error_msg <- paste0("Data transfer failed with error ",
+                                ct$code, ".\nReason given: ", ct$reason, ".\n",
+                                "More information at https://confluence.ecmwf.int/display/WEBAPI/Web+API+Troubleshooting")
+          }
+          warn_or_error(error_msg, error = fail_is_error)
+          return(invisible(self))
         }
 
         if (status_code == "202") {  # still processing
           # Simulated content with the things we need to use.
-          self$status <- self$state <-"running"
+          self$status <- self$state <- "running"
           self$code <- status_code
-          self$retry <- as.numeric(response$headers$`retry-after`)
-          self$url <- self$href <-  response$url
-          self$next_retry <- Sys.time() + self$retry
-        } else if (status_code == "200") {  # Done!
-          self$status <- self$state <-  "completed"
-          self$code <- 302
-          self$url <- self$href <-  response$url
-          self$file_url <- response$url
+          self$retry <- as.numeric(response$header$headers$`retry-after`)
+          self$url <- self$href <-  response$header$url
           self$next_retry <- Sys.time() + self$retry
         } else {
           self$next_retry <- Sys.time() + self$retry
-          warn_or_error("Data transfer failed with error ", response$status_code, error = fail_is_error)
+          warn_or_error("Data transfer failed with error ", response$header$status_code, error = fail_is_error)
 
         }
         return(invisible(self))
@@ -228,7 +248,7 @@ transfer_obj <- R6::R6Class("wf_transfer",
 
     open_request = function() {
       if (self$service == "webapi") {
-        url <- paste0("https://apps.ecmwf.int/sso/login/openid-connect/?back=https://apps.ecmwf.int/webmars/joblist/", self$name)
+        url <- paste0("https://apps.ecmwf.int/webmars/joblist/", self$name)
       } else if (self$service == "cds") {
         url <- paste0("https://cds.climate.copernicus.eu/user/login?destination=%2Fcdsapp%23!%2Fyourrequests")
       }
