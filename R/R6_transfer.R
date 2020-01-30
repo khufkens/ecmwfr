@@ -168,8 +168,11 @@ transfer_obj <- R6::R6Class("wf_transfer",
           self$code <- 302
           self$file_url <- ct$location
         } else if (self$status == "failed") {
-          # if the transfer failed, return a warning
-          warn_or_error("Data transfer failed with error ", ct$error, error = fail_is_error)
+          permanent <- if (ct$error$permanent) "permanent "
+          error_msg <- paste0("Data transfer failed with ", permanent, ct$error$who, " error: ",
+                              ct$error$message, ".\nReason given: ", ct$error$reason, ".\n",
+                              "More information at ", ct$error$url)
+          warn_or_error(error_msg, error = fail_is_error)
         }
         self$next_retry <- Sys.time() + self$retry
         return(invisible(self))
