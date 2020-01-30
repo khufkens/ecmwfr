@@ -225,9 +225,9 @@ transfer_obj <- R6::R6Class("wf_transfer",
 
     open_request = function() {
       if (self$service == "webapi") {
-        url <- paste0("https://apps.ecmwf.int/webmars/joblist/", self$name)
+        url <- paste0("https://apps.ecmwf.int/sso/login/openid-connect/?back=https://apps.ecmwf.int/webmars/joblist/", self$name)
       } else if (self$service == "cds") {
-        url <- paste0("https://cds.climate.copernicus.eu/cdsapp#!/yourrequests")
+        url <- paste0("https://cds.climate.copernicus.eu/user/login?destination=%2Fcdsapp%23!%2Fyourrequests")
       }
       utils::browseURL(url)
       return(invisible(self))
