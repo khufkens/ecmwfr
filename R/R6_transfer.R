@@ -27,6 +27,9 @@ transfer_obj <- R6::R6Class("wf_transfer",
       # returns the service to use if successful
       wf_check <- lapply(user, function(u) try(wf_check_request(u, request), silent = TRUE))
       correct <- which(!vapply(wf_check, inherits, TRUE, "try-error"))
+      if (length(correct) == 0) {
+        stop("Invalid request")
+      }
       wf_check <- wf_check[[correct]]
       user <- user[correct]
       self$user <- user
