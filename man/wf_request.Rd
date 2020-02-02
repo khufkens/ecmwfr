@@ -4,8 +4,15 @@
 \alias{wf_request}
 \title{ECMWF data request and download}
 \usage{
-wf_request(request, user, transfer = TRUE, path = tempdir(),
-  time_out = 3600, job_name, verbose = TRUE)
+wf_request(
+  request,
+  user,
+  transfer = TRUE,
+  path = tempdir(),
+  time_out = 3600,
+  job_name,
+  verbose = TRUE
+)
 }
 \arguments{
 \item{request}{nested list with query parameters following the layout
@@ -22,7 +29,7 @@ used to retrieve the token set by \code{\link[ecmwfr]{wf_set_key}}}
 \code{3*3600} seconds).}
 
 \item{job_name}{optional name to use as an RStudio job and as output variable
-name}
+name. It has to be a syntactically valid name.}
 
 \item{verbose}{show feedback on processing}
 }

@@ -4,8 +4,14 @@
 \alias{wf_transfer}
 \title{ECMWF data transfer function}
 \usage{
-wf_transfer(url, user, service = "webapi", path = tempdir(),
-  filename = tempfile("ecmwfr_"), verbose = TRUE)
+wf_transfer(
+  url,
+  user,
+  service = "webapi",
+  path = tempdir(),
+  filename = tempfile("ecmwfr_"),
+  verbose = TRUE
+)
 }
 \arguments{
 \item{url}{url to query}

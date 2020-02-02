@@ -132,7 +132,6 @@ transfer_obj <- R6::R6Class("wf_transfer",
         warn_or_error("Request was previously deleted from queue", call. = FALSE, error = fail_is_error)
         return(invisible(self))
       }
-
       key <- wf_get_key(user = self$user, service = self$service)
       retry_in <- as.numeric(self$next_retry) - as.numeric(Sys.time())
       if (retry_in > 0) {
@@ -191,22 +190,24 @@ transfer_obj <- R6::R6Class("wf_transfer",
         )
 
         status_code <- response$header[["status_code"]]
+
         if (status_code == "200") {  # Done!
             self$status <- self$state <-  "completed"
             self$code <- 302
             self$url <- self$href <-  response$header$url
             self$file_url <- response$header$url
+            self$retry <- response$header$headers$`retry-after`
             self$next_retry <- Sys.time() + self$retry
             return(invisible(self))
         }
 
         response <- response$get_response()
+        ct <- httr::content(response)
 
         if (httr::http_error(response$status_code)) {
-          ct <- httr::content(response)
           self$status <- self$state <- ct$status
           self$code <- status_code
-          self$retry <- as.numeric(ct$retry)
+          self$retry <- as.numeric(response$headers$`retry-after`)
           self$url <- self$href <- ct$href
           self$next_retry <- Sys.time() + self$retry
           if (self$status == "rejected") {
@@ -222,18 +223,16 @@ transfer_obj <- R6::R6Class("wf_transfer",
           return(invisible(self))
         }
 
-        if (status_code == "202") {  # still processing
+        if (response$status_code == "202") {  # still processing
           # Simulated content with the things we need to use.
           self$status <- self$state <- "running"
           self$code <- status_code
-          self$retry <- as.numeric(response$header$headers$`retry-after`)
-          self$url <- self$href <-  response$header$url
+          self$retry <- as.numeric(response$headers$`retry-after`)
+          self$url <- self$href <- response$headers$location
           self$next_retry <- Sys.time() + self$retry
-        } else {
-          self$next_retry <- Sys.time() + self$retry
-          warn_or_error("Data transfer failed with error ", response$header$status_code, error = fail_is_error)
-
         }
+        self$next_retry <- Sys.time() + self$retry
+        browser(expr = length(self$retry) == 0)
         return(invisible(self))
       }
     },
