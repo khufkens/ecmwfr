@@ -132,6 +132,12 @@ transfer_obj <- R6::R6Class("wf_transfer",
         warn_or_error("Request was previously deleted from queue", call. = FALSE, error = fail_is_error)
         return(invisible(self))
       }
+
+      if (self$status == "failed") {
+        warn_or_error("Request has failed", call. = FALSE, error = fail_is_error)
+        return(invisible(self))
+      }
+
       key <- wf_get_key(user = self$user, service = self$service)
       retry_in <- as.numeric(self$next_retry) - as.numeric(Sys.time())
       if (retry_in > 0) {
@@ -169,6 +175,7 @@ transfer_obj <- R6::R6Class("wf_transfer",
           self$code <- 302
           self$file_url <- ct$location
         } else if (self$status == "failed") {
+          self$code <- 404
           permanent <- if (ct$error$permanent) "permanent "
           error_msg <- paste0("Data transfer failed with ", permanent, ct$error$who, " error: ",
                               ct$error$message, ".\nReason given: ", ct$error$reason, ".\n",
@@ -238,7 +245,8 @@ transfer_obj <- R6::R6Class("wf_transfer",
     },
 
     is_running = function() {
-      !(self$code == 302)
+      self$status == "running"
+      # !(self$code == 302)
     },
 
     is_pending = function() {
