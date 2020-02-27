@@ -2,7 +2,7 @@
 opts <- options(keyring_warn_for_env_fallback = FALSE)
 on.exit(options(opts), add = TRUE)
 user <- "khrdev@outlook.com"
-user <- "eliocampitelli@gmail.com"
+
 # format request (see below)
 my_request <- list(stream = "oper",
                    levtype = "sfc",
