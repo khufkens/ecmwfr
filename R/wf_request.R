@@ -151,208 +151,24 @@ wf_request <- function(request,
   service <- wf_check$service
   url <- wf_check$url
 
-  # get key
-  key <- wf_get_key(user = user, service = service)
 
-  # getting api url: different handling if 'dataset = "mars"',
-  # requests to 'dataset = "mars"' require a non-public user
-  # account (member states/commercial).
+  service <- switch(service,
+                    webapi = webapi_service,
+                    cds = cds_service,
+                    ads = ads_service)
 
-  # depending on the service get the response
-  # for the query provided
-  if (service == "webapi") {
-    response <- httr::POST(
-      url,
-      httr::add_headers(
-        "Accept" = "application/json",
-        "Content-Type" = "application/json",
-        "From" = user,
-        "X-ECMWF-KEY" = key
-      ),
-      body = request,
-      encode = "json"
-    )
-  }
 
-  if (service == "cds"){
-    response <- httr::POST(
-      sprintf(
-        "%s/resources/%s",
-        url,
-        request$dataset_short_name
-      ),
-      httr::authenticate(user, key),
-      httr::add_headers("Accept" = "application/json",
-                        "Content-Type" = "application/json"),
-      body = request,
-      encode = "json"
-    )
-  }
-
-  if (service == "ads"){
-
-    # fix strange difference in processing queries
-    # from CDS
-    body <- request
-    body$dataset_short_name <- NULL
-    body$target <- NULL
-    response <- httr::POST(
-      sprintf(
-        "%s/resources/%s",
-        url,
-        request$dataset_short_name
-      ),
-      httr::authenticate(user, key),
-      httr::add_headers("Accept" = "application/json",
-                        "Content-Type" = "application/json"),
-      body = body,
-      encode = "json"
-    )
-  }
-
-  # trap general http error
-  if (httr::http_error(response)) {
-    stop(httr::content(response),
-         call. = FALSE)
-  }
-
-  # grab content, to look at the status
-  ct <- httr::content(response)
-
-  # first run is always 202
-  if ((service == "cds" | service == "ads")) {
-    ct$code <- 202
-  }
-
-  # some verbose feedback
-  if (verbose) {
-    message("- staging data transfer at url endpoint or request id:")
-    message("  ", switch(service,
-                         "cds" = ct$request_id,
-                         "ads" = ct$request_id,
-                         "webapi" = ct$href), "\n")
-  }
-
-  # only return the content of the query
-  if (!transfer) {
-    message("  No download requests will be made, however...\n")
-    exit_message(
-      url = switch(service,
-                   "cds" = ct$request_id,
-                   "ads" = ct$request_id,
-                   "webapi" = ct$href),
-      path = path,
-      file = request$target,
-      service = service
-    )
-    return(invisible(ct))
-  }
-
-  # set time-out counter
-  if (verbose) {
-    message(sprintf("- timeout set to %.1f hours", time_out / 3600))
-  }
-
-  # set time-out
-  time_out <- Sys.time() + time_out
-
-  # Temporary file name, will be used in combination with tempdir() when
-  # calling wf_transfer.
-  tmp_file <- basename(tempfile("ecmwfr_"))
-
-  # keep waiting for the download order to come online
-  # with status code 303. 202 = connection accepted, but job queued.
-  # http error codes (>400) will be trapped by the wf_transfer()
-  # function call
-  while (ct$code == 202) {
-    # check formatting state variable CDS
-
-    # exit routine when the time out
-    if (Sys.time() > time_out) {
-      if (verbose) {
-        message("  Your download timed out, however ...\n")
-        exit_message(
-          url = switch(service,
-                       "cds" = ct$request_id,
-                       "ads" = ct$request_id,
-                       "webapi" = ct$href),
-          path = path,
-          file = request$target,
-          service = service
-        )
-      }
-      return(ct)
+  request <- service$new(request = request,
+                     user = user,
+                     url = url,
+                     path = path)
+  if (transfer) {
+    request$transfer(time_out = time_out)
+    if (request$is_success()) {
+      return(request$get_file())
     }
-
-    # set retry rate, dynamic for WebAPI, static 10 seconds CDS
-    retry <- as.numeric(ifelse((service == "cds" | service == "ads"),
-                               5, ct$retry))
-
-    if (verbose) {
-      # let a spinner spin for "retry" seconds
-      spinner(retry)
-    } else {
-      # sleep
-      Sys.sleep(retry)
-    }
-
-    # attempt a download. Use 'input_user', can also
-    # be NULL (load user information from '.ecmwfapirc'
-    # file inside wf_transfer).
-    ct <- wf_transfer(
-      url = switch(service,
-                   "cds" = ct$request_id,
-                   "ads" = ct$request_id,
-                   "webapi" = ct$href),
-      user    = user,
-      service  = service,
-      filename = tmp_file,
-      verbose  = verbose
-    )
+    warning("Transfer was not successfull, returning request object")
   }
 
-  # Copy data from temporary file to final location
-  # and delete original, with an exception for tempdir() location.
-  # The latter to facilitate package integration.
-  if (path != tempdir()) {
-    src <- file.path(tempdir(), tmp_file)
-    dst <- file.path(path, request$target)
-
-    # rename / move file
-    move <- suppressWarnings(file.rename(src, dst))
-
-    # check if the move was succesful
-    # fails for separate disks/partitions
-    # then copy and remove
-    if (!move) {
-      file.copy(src, dst, overwrite = TRUE)
-      file.remove(src)
-    }
-
-    if (verbose) {
-      message(sprintf("- moved temporary file to -> %s", dst))
-    }
-
-  } else {
-    dst <- file.path(path, tmp_file)
-    message("- file not copied and removed (path == tempdir())")
-  }
-
-  # delete the request upon succesful download
-  # to free up other download slots. Not possible
-  # for ECMWF mars requests (skip)
-  if (!request$dataset == "mars") {
-    wf_delete(
-      user   = user,
-      url = switch(service,
-                   "cds" = ct$request_id,
-                   "ads" = ct$request_id,
-                   "webapi" = ct$href),
-      verbose = verbose,
-      service = service
-    )
-  }
-
-  # return final file name/path (dst = destination).
-  return(invisible(dst))
+  return(request)
 }

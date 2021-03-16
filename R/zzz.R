@@ -247,3 +247,14 @@ retrieve_header <- function(url, headers) {
   head$headers <- curl::parse_headers_list(head$headers)
   return(head)
 }
+
+
+
+# Encapsulates errors are warnings logic.
+warn_or_error <- function(..., error = FALSE) {
+  if (error) {
+    stop(...)
+  } else {
+    warning(...)
+  }
+}

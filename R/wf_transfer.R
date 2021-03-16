@@ -37,6 +37,11 @@ wf_transfer <- function(url,
                         filename = tempfile("ecmwfr_"),
                         verbose = TRUE) {
 
+  if (inherits(url, "ecmwfr_service")) {
+    url$transfer()
+    return(url)
+  }
+
   # match arguments, if not stop
   service <- match.arg(service, c("webapi", "cds", "ads"))
 
