@@ -1,4 +1,4 @@
-service <- R6::R6Class("ecmwfr_service",
+service <- R6::R6Class("ecmwfr_service", cloneable = FALSE,
   public = list(
     initialize = function(request,
                           user,
