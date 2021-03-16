@@ -43,7 +43,7 @@ ads_service <- R6::R6Class("ecmwfr_ads", inherit = cds_service,
         message("  ", ct$request_id, "\n")
       }
 
-      private$status <- ct$state
+      private$status <- "submitted"
       private$code <- ct$code
       private$name <- ct$request_id
       private$retry <- 5
